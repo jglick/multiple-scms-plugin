@@ -2,12 +2,13 @@ package org.jenkinsci.plugins.multiplescms;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.model.Action;
 import hudson.model.BuildListener;
-import hudson.model.Descriptor;
 import hudson.model.Saveable;
 import hudson.model.TaskListener;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.Descriptor;
 import hudson.scm.ChangeLogParser;
 import hudson.scm.PollingResult;
 import hudson.scm.PollingResult.Change;
@@ -23,7 +24,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 import net.sf.json.JSONObject;
 
@@ -62,6 +65,17 @@ public class MultiSCM extends SCM implements Saveable {
 		return revisionStates;
 	}
 
+    @Override
+    public void buildEnvVars(AbstractBuild<?,?> build, Map<String, String> env) {
+    	for(SCM scm : scms) {
+    		try {
+    			scm.buildEnvVars(build, env);
+    		}
+    		catch(NullPointerException npe)
+    		{}
+    	}
+    }
+    
 	@Override
 	protected PollingResult compareRemoteRevisionWith(
 			AbstractProject<?, ?> project, Launcher launcher,
@@ -82,23 +96,34 @@ public class MultiSCM extends SCM implements Saveable {
 		}
 		return new PollingResult(baselineStates, currentStates, overallChange);
 	}
-
+	
 	@Override
 	public boolean checkout(AbstractBuild<?, ?> build, Launcher launcher,
 			FilePath workspace, BuildListener listener, File changelogFile)
 			throws IOException, InterruptedException {
 
-		build.addAction(new MultiSCMRevisionState());
+		MultiSCMRevisionState revisionState = new MultiSCMRevisionState();		
+		build.addAction(revisionState);
+		
+		HashSet<Object> scmActions = new HashSet<Object>();
 		
 		FileOutputStream logStream = new FileOutputStream(changelogFile);
 		OutputStreamWriter logWriter = new OutputStreamWriter(logStream);
 		logWriter.write(String.format("<%s>\n", MultiSCMChangeLogParser.ROOT_XML_TAG));
 		
 		boolean checkoutOK = true;
-		for(SCM scm : scms) {
+		for(SCM scm : scms) {			
 			String changeLogPath = changelogFile.getPath() + ".temp";
 			File subChangeLog = new File(changeLogPath);
 			checkoutOK = scm.checkout(build, launcher, workspace, listener, subChangeLog) && checkoutOK;
+			
+			List<Action> actions = build.getActions();
+			for(Action a : actions) {
+				if(!scmActions.contains(a) && a instanceof SCMRevisionState) {
+					scmActions.add(a);
+					revisionState.add(scm, workspace, build, (SCMRevisionState) a);
+				}
+			}
 			
 			String subLogText = FileUtils.readFileToString(subChangeLog);
 			logWriter.write(String.format("<%s scm=\"%s\">\n<![CDATA[%s]]>\n</%s>\n",
@@ -115,6 +140,17 @@ public class MultiSCM extends SCM implements Saveable {
 		return checkoutOK;
 	}
 
+	@Override
+	public FilePath[] getModuleRoots(FilePath workspace, AbstractBuild build) {
+		ArrayList<FilePath> paths = new ArrayList<FilePath>();
+		for(SCM scm : scms) {
+			FilePath[] p = scm.getModuleRoots(workspace, build); 
+			for(FilePath p2 : p)
+				paths.add(p2);
+		}
+		return paths.toArray(new FilePath[paths.size()]);
+	}
+	
 	@Override
 	public ChangeLogParser createChangeLogParser() {
 		return new MultiSCMChangeLogParser();

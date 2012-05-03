@@ -8,7 +8,7 @@
 
   <groupId>org.jenkins-ci.plugins</groupId>
   <artifactId>multiple-scms</artifactId>
-  <version>0.2-SNAPSHOT</version>
+  <version>0.3-SNAPSHOT</version>
   <packaging>hpi</packaging>
   <name>Jenkins Multiple SCMs plugin</name>
   <description>Allows multiple SCM plugins to be used in a job.</description>
@@ -24,8 +24,8 @@
 
   <repositories>
     <repository> <!-- bootstrapping: need to find parent POM -->
-      <id>m.g.o-public</id>
-      <url>http://maven.glassfish.org/content/groups/public/</url>
+      <id>repo.jenkins-ci.org</id>
+      <url>http://repo.jenkins-ci.org/public/</url>
     </repository>
   </repositories>
 
@@ -55,4 +55,12 @@
     </dependency>
   </dependencies>
 
-</project>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>repo.jenkins-ci.org</id>
+            <url>http://repo.jenkins-ci.org/public/</url>
+        </pluginRepository>
+    </pluginRepositories>
+</project>  
+
